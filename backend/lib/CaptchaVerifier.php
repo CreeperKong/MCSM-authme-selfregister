@@ -17,8 +17,7 @@ class CaptchaVerifier
 
     public function verify(array $payload, ?string $ipAddress = null): void
     {
-        $provider = $payload['provider'] ?? $this->config['provider'] ?? 'simple_math';
-        $provider = strtolower($provider);
+        $provider = strtolower($this->config['provider'] ?? 'simple_math');
 
         if ($provider === 'none') {
             return;

@@ -172,6 +172,8 @@ npm run build
 - `hcaptcha`：隐私友好地区推荐。
 - `turnstile`：Cloudflare 免费验证码。
 
+⚠️ 服务器端始终以 `.env` 中的 `CAPTCHA_PROVIDER` 为准，前端提交的字段仅携带令牌与答案，无法通过伪造 `provider` 绕过验证。
+
 切换提供商后刷新 `/admin` 与 `/` 即可；前端会自动加载对应脚本并在 `register.php` 中校验。
 
 ## 测试建议
