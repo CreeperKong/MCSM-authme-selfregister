@@ -59,14 +59,6 @@ CREATE TABLE registration_requests (
 	rejection_reason TEXT NULL,
 	ip_address VARCHAR(64) NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE captcha_challenges (
-	id CHAR(40) PRIMARY KEY,
-	answer_hash VARCHAR(255) NOT NULL,
-	expires_at DATETIME NOT NULL,
-	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	KEY idx_expire (expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
 ## 数据库初始化
