@@ -16,13 +16,21 @@ React (前端) + PHP FastCGI (后端) + MySQL 的一体化方案，用于在 MCS
 │   ├── api/              # register.php / requests.php / config.php / captcha.php
 │   ├── lib/              # Database、Captcha、MCSManager client 等基础类
 │   ├── bootstrap.php
-│   └── config.php        # 从 .env / 系统环境注入配置
+│   ├── database-init.php # 数据库初始化脚本（CLI 专用）
+│   ├── setup.php         # 配置向导脚本（CLI 专用）
+│   ├── config.php        # 配置文件（自动生成）
+│   ├── config.example.php # 配置示例
+│   └── schema.sql        # 数据库 schema
 ├── public/               # 静态资源 (Vite 默认公共目录)
 ├── src/                  # React 前端源代码
+├── .htaccess             # Apache 伪静态配置
 ├── .env.example          # 后端环境变量示例
+├── DEPLOYMENT.md         # 详细部署指南（虚拟主机/cPanel/Plesk）
 ├── package.json
 └── vite.config.js
 ```
+
+📖 **详细部署指南**：见 [DEPLOYMENT.md](DEPLOYMENT.md) - 适用于 cPanel、Plesk 等虚拟主机环境
 
 ## 基础环境
 
@@ -61,57 +69,118 @@ CREATE TABLE captcha_challenges (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
+## 数据库初始化
+
+在首次启动系统前，需要初始化数据库表结构。
+
+### 方案一：自动初始化（推荐）
+
+直接运行初始化脚本（确保 MySQL 连接配置已在 `.env` 或环境变量中）：
+
+```bash
+php backend/database-init.php
+```
+
+系统将自动创建 `captcha_challenges` 和 `registration_requests` 表。
+
+### 方案二：手动初始化
+
+也可以直接导入 SQL 文件：
+
+```bash
+mysql -h127.0.0.1 -u{username} -p{password} {database} < backend/schema.sql
+```
+
 ## 配置步骤
 
-1. 复制示例环境变量并填写真实值：
+### 快速配置（推荐）
+
+运行交互式配置向导，自动生成 config.php：
+
+```bash
+php backend/setup.php
+```
+
+向导会引导您完成以下配置项：
+- **数据库**：主机、端口、数据库名、用户名、密码
+- **管理员**：Token（可自动生成）
+- **加密**：应用密钥（可自动生成 32 字节 base64）
+- **MCSManager**：地址、API Key、默认守护进程/实例 ID
+- **验证码**：提供商类型（simple_math/recaptcha_v2/hcaptcha/turnstile）、过期时间
+
+### 手动配置
+
+1. 复制示例配置文件：
 
 	 ```bash
-	 cp .env.example .env
-	 # 生成 32 字节 base64 密钥
-	 openssl rand -base64 32
+	 cp backend/config.example.php backend/config.php
 	 ```
 
-	 关键变量：
+2. 编辑 `backend/config.php` 并填写相关配置：
 
-	 | 变量 | 说明 |
+	 | 配置项 | 说明 |
 	 | --- | --- |
-	 | `APP_ENCRYPTION_KEY` | 32 字节 base64，用于 AES-256-GCM 加密玩家密码 |
-	 | `ADMIN_PANEL_TOKEN` | 管理员端口所需令牌，前端 `X-Admin-Token` 头 |
-	 | `MCSM_BASE_URL` / `MCSM_API_KEY` | MCSManager 面板地址与 API Key（参考文档链接） |
-	 | `MCSM_DEFAULT_DAEMON_ID` / `MCSM_DEFAULT_INSTANCE_ID` | 审核面板默认填充的节点 & 实例 |
-	 | `AUTHME_COMMAND_TEMPLATE` | 默认 `authme register {username} {password} {password}`，可自定义 |
-	 | `CAPTCHA_PROVIDER` | `simple_math` / `recaptcha_v2` / `hcaptcha` / `turnstile` |
-	 | `*_SITE_KEY` & `*_SECRET_KEY` | 对应验证码的站点/密钥 |
+	 | `db.host` | MySQL 数据库主机 |
+	 | `db.port` | MySQL 数据库端口（默认 3306） |
+	 | `db.database` | 数据库名称 |
+	 | `db.username` | 数据库用户名 |
+	 | `db.password` | 数据库密码 |
+	 | `auth.admin_token` | 管理员 API Token（需传入 `X-Admin-Token` 头） |
+	 | `encryption_key` | AES-256-GCM 加密密钥（32 字节 base64） |
+	 | `mcsm.base_url` | MCSManager 面板地址 |
+	 | `mcsm.api_key` | MCSManager API Key |
+	 | `mcsm.default_daemon_id` | 默认守护进程 ID |
+	 | `mcsm.default_instance_id` | 默认实例 ID |
+	 | `captcha.provider` | 验证码提供商（simple_math/recaptcha_v2/hcaptcha/turnstile） |
+	 | `captcha.ttl_seconds` | 验证码有效期（秒） |
 
-2. 服务器层将 `.env` 注入 PHP 环境（或直接编辑 `backend/config.php`）。`backend/bootstrap.php` 会在运行时解析 `.env`。
+	 如需使用高级验证码（reCAPTCHA/hCaptcha/Turnstile），也可配置对应的 `site_key` 和 `secret_key`。
 
-3. 启动 PHP-FPM：
+### 初始化数据库
 
-	 ```bash
-	 php-fpm --nodaemonize
-	 ```
+配置完成后，初始化数据库表：
 
-4. Nginx 示例（将 React 构建后的静态文件与 PHP API 放在同一站点根目录）：
+```bash
+php backend/database-init.php
+```
 
-	 ```nginx
-	 server {
-		 listen 443 ssl;
-		 server_name auth.example.com;
-		 root /var/www/mcsm-authme-selfregister/dist;
+系统将自动创建：
+- `captcha_challenges` - 验证码表
+- `registration_requests` - 注册请求表
 
-		 location /backend/ {
-			 alias /var/www/mcsm-authme-selfregister/backend/;
-			 try_files $uri =404;
-			 include fastcgi_params;
-			 fastcgi_param SCRIPT_FILENAME $request_filename;
-			 fastcgi_pass unix:/run/php/php8.2-fpm.sock;
-		 }
+## 环境变量配置
 
-		 location / {
-			 try_files $uri /index.html;
-		 }
-	 }
-	 ```
+系统也支持通过 `.env` 文件传入环境变量覆盖 config.php：
+
+```bash
+cp .env.example .env
+```
+
+可设置的环境变量包括：
+
+| 变量 | 说明 |
+| --- | --- |
+| `APP_ENV` | 环境模式（production/development） |
+| `APP_TIMEZONE` | 时区（默认 Asia/Shanghai） |
+| `DB_HOST` | 数据库主机 |
+| `DB_PORT` | 数据库端口 |
+| `DB_DATABASE` | 数据库名称 |
+| `DB_USERNAME` | 数据库用户名 |
+| `DB_PASSWORD` | 数据库密码 |
+| `APP_ENCRYPTION_KEY` | 加密密钥 |
+| `ADMIN_PANEL_TOKEN` | 管理员 Token |
+| `MCSM_BASE_URL` | MCSManager 地址 |
+| `MCSM_API_KEY` | MCSManager API Key |
+| `MCSM_DEFAULT_DAEMON_ID` | 默认守护进程 ID |
+| `MCSM_DEFAULT_INSTANCE_ID` | 默认实例 ID |
+| `AUTHME_COMMAND_TEMPLATE` | AuthMe 命令模板 |
+| `CAPTCHA_PROVIDER` | 验证码提供商 |
+| `CAPTCHA_TTL_SECONDS` | 验证码过期时间（秒） |
+| `RECAPTCHA_SITE_KEY` / `RECAPTCHA_SECRET_KEY` | reCAPTCHA v2 密钥 |
+| `HCAPTCHA_SITE_KEY` / `HCAPTCHA_SECRET_KEY` | hCaptcha 密钥 |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile 密钥 |
+
+`backend/bootstrap.php` 在运行时会自动加载 `.env` 文件并注入环境变量。
 
 ## 前端开发
 
@@ -126,7 +195,125 @@ npm run dev
 npm run build
 ```
 
-`VITE_API_BASE_URL` 默认为 `/backend/api`，如前后端部署在不同域名，可在 `.env`（Vite）中设置 `VITE_API_BASE_URL=https://api.example.com/backend/api`。
+`VITE_API_BASE_URL` 默认为 `/backend/api`，如前后端部署在不同域名，可配置环境变量覆盖。
+
+## 部署
+
+### 快速部署流程
+
+```bash
+# 1. 初始化配置（交互式向导）
+php backend/setup.php
+
+# 2. 初始化数据库
+php backend/database-init.php
+
+# 3. 构建前端（可选，如果已有 node 环境）
+npm install && npm run build
+
+# 4. 启动 PHP-FPM
+php-fpm --nodaemonize
+```
+
+### 虚拟主机/cPanel/Plesk 用户
+
+如果使用共享主机或虚拟主机面板，请参考详细指南：**[DEPLOYMENT.md](DEPLOYMENT.md)**
+
+该文档包含：
+- ✅ 一键部署步骤
+- ✅ Apache `.htaccess` 配置说明
+- ✅ 虚拟主机控制面板设置
+- ✅ 故障排查指南
+
+### Nginx 配置示例
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name auth.example.com;
+    
+    # SSL 证书配置（可选）
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    # 设置站点根目录
+    root /var/www/mcsm-authme-selfregister;
+    index index.html index.php;
+    
+    # PHP API 路由
+    location /backend/api/ {
+        try_files $uri =404;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+    }
+    
+    # React SPA 路由
+    location / {
+        try_files $uri /index.html;
+    }
+    
+    # 静态资源缓存
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
+```
+
+### Apache 配置示例
+
+```apache
+<VirtualHost *:443>
+    ServerName auth.example.com
+    DocumentRoot /var/www/mcsm-authme-selfregister
+    
+    # 启用 SSL（可选）
+    SSLEngine on
+    SSLCertificateFile /path/to/cert.pem
+    SSLCertificateKeyFile /path/to/key.pem
+    
+    # PHP API 处理
+    <Location /backend/api>
+        SetHandler application/x-httpd-php
+    </Location>
+    
+    # React SPA 路由（需启用 mod_rewrite）
+    <IfModule mod_rewrite.c>
+        RewriteEngine On
+        RewriteBase /
+        RewriteRule ^index\.html$ - [L]
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteRule . /index.html [L]
+    </IfModule>
+</VirtualHost>
+```
+
+### .htaccess 配置（简化版）
+
+如果使用 Apache 但没有 VirtualHost 访问权限，可以在项目根目录放置 `.htaccess` 文件来实现伪静态配置。项目已自动生成了完整的 `.htaccess` 文件，功能包括：
+
+- ✅ **React SPA 路由** - 将所有非文件/目录的请求转发到 `index.html`
+- ✅ **PHP API 优先级** - `/backend/api/` 请求直接由 PHP 处理
+- ✅ **静态资源缓存** - 设置长期缓存策略（CSS/JS/图片/字体等）
+- ✅ **Gzip 压缩** - 自动压缩 HTML、CSS、JavaScript 等文本资源
+- ✅ **安全防护** - 禁止直接访问敏感文件（`.env`、`setup.php` 等）
+- ✅ **UTF-8 编码** - 确保正确的字符集设置
+
+**配置位置**：`/.htaccess`
+
+**启用条件**：
+1. Apache 服务器（确保启用 `mod_rewrite`）
+2. `.htaccess` 文件在项目根目录
+3. 虚拟主机 AllowOverride 配置允许 `.htaccess`（通常默认允许）
+
+```apache
+# 在 VirtualHost 中确保允许 .htaccess 覆盖
+<Directory /var/www/mcsm-authme-selfregister>
+    AllowOverride All
+</Directory>
+```
 
 ## 后端接口摘要
 

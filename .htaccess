@@ -1,0 +1,119 @@
+<IfModule mod_rewrite.c>
+    # 启用 rewrite 引擎
+    RewriteEngine On
+    
+    # 设置基础路径（根据实际安装位置调整）
+    RewriteBase /
+    
+    # ============================================
+    # PHP API 路由 - 优先处理
+    # ============================================
+    
+    # 允许直接访问 /backend/api 下的 PHP 文件
+    RewriteRule ^backend/api/.*\.php$ - [L]
+    
+    # ============================================
+    # 静态资源处理
+    # ============================================
+    
+    # 如果请求的是真实存在的文件，直接处理
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule ^ - [L]
+    
+    # 如果请求的是真实存在的目录，直接处理
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+    
+    # ============================================
+    # React SPA 路由 - 将所有其他请求转到 index.html
+    # ============================================
+    
+    # 排除 /backend 路由，不转到 index.html
+    RewriteCond %{REQUEST_URI} !^/backend/
+    
+    # 所有其他请求转到 index.html（React Router 处理）
+    RewriteRule ^ index.html [QSA,L]
+</IfModule>
+
+# ============================================
+# 性能优化 - 静态资源缓存
+# ============================================
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    
+    # 默认：1 小时
+    ExpiresDefault "access plus 1 hour"
+    
+    # HTML 文件：不缓存或短期缓存
+    ExpiresByType text/html "access plus 0 seconds"
+    
+    # JavaScript 和 CSS：长期缓存
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType text/javascript "access plus 1 year"
+    ExpiresByType text/css "access plus 1 year"
+    
+    # 图片：1 年缓存
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/x-icon "access plus 1 year"
+    
+    # 字体文件：1 年缓存
+    ExpiresByType font/ttf "access plus 1 year"
+    ExpiresByType font/otf "access plus 1 year"
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType application/vnd.ms-fontobject "access plus 1 year"
+</IfModule>
+
+# ============================================
+# 性能优化 - Gzip 压缩
+# ============================================
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE text/javascript
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/atom+xml
+    AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# ============================================
+# 安全配置
+# ============================================
+
+# 防止访问敏感文件
+<FilesMatch "\.env|\.git|config\.example\.php|schema\.sql|setup\.php|database-init\.php">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# 防止目录浏览
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+
+# ============================================
+# 字符编码
+# ============================================
+
+AddDefaultCharset UTF-8
+
+# 设置 PHP 响应头
+<IfModule mod_php.c>
+    php_value default_charset "UTF-8"
+</IfModule>
