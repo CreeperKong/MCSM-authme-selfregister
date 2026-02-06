@@ -33,7 +33,6 @@ export default function AdminPage() {
   const [instancesMaxPage, setInstancesMaxPage] = useState(1)
   const [showCommandTemplateDialog, setShowCommandTemplateDialog] = useState(false)
   const [commandTemplateInput, setCommandTemplateInput] = useState('')
-  const [savingCommandTemplate, setSavingCommandTemplate] = useState(false)
   const [commandTemplateSaveStatus, setCommandTemplateSaveStatus] = useState('idle') // 'idle', 'saving', 'saved', 'error'
   const commandTemplateSaveTimerRef = useRef(null)
 
@@ -199,14 +198,13 @@ export default function AdminPage() {
     setShowCommandTemplateDialog(true)
   }
 
-  const handleSaveCommandTemplate = async () => {
+  const handleSaveCommandTemplate = useCallback(async () => {
     if (!adminToken) return
     const trimmed = commandTemplateInput.trim()
     if (!trimmed) {
       setError('命令模板不能为空')
       return
     }
-    setSavingCommandTemplate(true)
     setCommandTemplateSaveStatus('saving')
     setError(null)
     try {
@@ -225,10 +223,8 @@ export default function AdminPage() {
     } catch (err) {
       setError(err.message)
       setCommandTemplateSaveStatus('error')
-    } finally {
-      setSavingCommandTemplate(false)
     }
-  }
+  }, [adminToken, commandTemplateInput])
 
   // Auto-save command template with debouncing
   useEffect(() => {
@@ -258,7 +254,7 @@ export default function AdminPage() {
         clearTimeout(commandTemplateSaveTimerRef.current)
       }
     }
-  }, [commandTemplateInput, showCommandTemplateDialog, adminToken, config?.mcsm?.commandTemplate])
+  }, [commandTemplateInput, showCommandTemplateDialog, adminToken, config?.mcsm?.commandTemplate, handleSaveCommandTemplate])
 
   const mutateRequest = async (action, payload) => {
     if (!adminToken) return
