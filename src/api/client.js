@@ -59,6 +59,26 @@ export const apiClient = {
       headers: adminHeaders(token),
       body: payload,
     }),
+  fetchDaemons: (token) =>
+    request('/daemons.php', {
+      headers: adminHeaders(token),
+    }),
+  fetchInstances: (token, daemonId, page = 1, pageSize = 20) =>
+    request(`/instances.php?daemonId=${encodeURIComponent(daemonId)}&page=${page}&pageSize=${pageSize}`, {
+      headers: adminHeaders(token),
+    }),
+  saveSelection: (token, daemonId, instanceId) =>
+    request('/save_selection.php', {
+      method: 'POST',
+      headers: adminHeaders(token),
+      body: { daemonId, instanceId },
+    }),
+  updateCommandTemplate: (token, commandTemplate) =>
+    request('/update_config.php', {
+      method: 'POST',
+      headers: adminHeaders(token),
+      body: { commandTemplate },
+    }),
 }
 
 export default apiClient

@@ -18,7 +18,7 @@ if (php_sapi_name() !== 'cli') {
 }
 
 require_once __DIR__ . '/lib/DotEnv.php';
-require_once __DIR__ . '/lib/Database.php';
+require_once __DIR__ . '/lib/MysqlDatabase.php';
 
 DotEnv::load(dirname(__DIR__) . '/.env');
 $config = require __DIR__ . '/config.php';
@@ -32,8 +32,8 @@ try {
         throw new Exception('config.php 不存在。请先从 config.example.php 复制并配置好 config.php');
     }
     
-    $database = new Database($config['db']);
-    $pdo = $database->pdo();
+    $database = new MysqlDatabase($config['db']);
+    $mysqli = $database->mysqli();
     
     // Read schema file
     $schemaPath = __DIR__ . '/schema.sql';
@@ -69,12 +69,10 @@ try {
         
         if (!empty($sql)) {
             echo "执行: " . substr($sql, 0, 50) . "...\n";
-            try {
-                $pdo->exec($sql);
-                $executedCount++;
-            } catch (PDOException $e) {
-                throw new Exception("SQL 执行错误: " . $e->getMessage() . "\n语句: " . $sql);
+            if (!$mysqli->query($sql)) {
+                throw new Exception("SQL 执行错误: " . $mysqli->error . "\n语句: " . $sql);
             }
+            $executedCount++;
         }
     }
     
@@ -84,10 +82,10 @@ try {
     
     echo "\n✅ 数据库初始化成功！\n";
     echo "📊 执行了 $executedCount 条 SQL 语句\n";
-    echo "✓ captcha_challenges 表已创建\n";
     echo "✓ registration_requests 表已创建\n";
     
-} catch (Throwable $e) {
+    $database->close();
+} catch (Exception $e) {
     echo "❌ 初始化失败：" . $e->getMessage() . "\n";
     exit(1);
 }

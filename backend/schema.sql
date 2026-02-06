@@ -1,14 +1,5 @@
 -- MCSM AuthMe Self-Register Database Schema
 
--- Captcha challenges table for simple math captcha
-CREATE TABLE IF NOT EXISTS `captcha_challenges` (
-    `id` VARCHAR(20) PRIMARY KEY,
-    `answer_hash` VARCHAR(255) NOT NULL,
-    `expires_at` DATETIME NOT NULL,
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_expires_at (`expires_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 -- Registration requests table
 CREATE TABLE IF NOT EXISTS `registration_requests` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,

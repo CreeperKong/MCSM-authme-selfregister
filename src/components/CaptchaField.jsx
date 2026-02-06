@@ -95,7 +95,7 @@ export default function CaptchaField({
   const cleanupRef = useRef(null)
 
   useEffect(() => {
-    if (!containerRef.current || provider === 'simple_math') return undefined
+    if (!containerRef.current || provider === 'off' || provider === 'none') return undefined
     const def = PROVIDERS[provider]
     if (!def) return undefined
 
@@ -123,28 +123,8 @@ export default function CaptchaField({
     }
   }, [provider, siteKey, onToken])
 
-  if (!provider || provider === 'none') {
+  if (!provider || provider === 'off' || provider === 'none') {
     return null
-  }
-
-  if (provider === 'simple_math') {
-    return (
-      <div className="captchabox">
-        <p>人机验证：{simpleChallenge?.question || '正在加载题目...'}</p>
-        <div className="field" style={{ marginTop: '0.8rem' }}>
-          <label htmlFor="captcha-answer">请输入答案</label>
-          <input
-            id="captcha-answer"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="例如：42"
-            onChange={(e) => onSimpleAnswer(e.target.value)}
-            disabled={disabled || !simpleChallenge}
-          />
-        </div>
-      </div>
-    )
   }
 
   if (!siteKey) {

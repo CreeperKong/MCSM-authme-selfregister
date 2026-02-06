@@ -2,31 +2,17 @@
 class CaptchaVerifier
 {
     private array $config;
-    private SimpleCaptchaStore $store;
 
-    public function __construct(array $config, SimpleCaptchaStore $store)
+    public function __construct(array $config)
     {
         $this->config = $config;
-        $this->store = $store;
-    }
-
-    public function createChallenge(): array
-    {
-        return $this->store->createChallenge();
     }
 
     public function verify(array $payload, ?string $ipAddress = null): void
     {
-        $provider = strtolower($this->config['provider'] ?? 'simple_math');
+        $provider = strtolower($this->config['provider'] ?? 'off');
 
-        if ($provider === 'none') {
-            return;
-        }
-
-        if ($provider === 'simple_math') {
-            $challengeId = $payload['challengeId'] ?? $payload['challenge_id'] ?? null;
-            $answer = $payload['answer'] ?? null;
-            $this->store->validate((string) $challengeId, (string) $answer);
+        if ($provider === 'off' || $provider === 'none') {
             return;
         }
 

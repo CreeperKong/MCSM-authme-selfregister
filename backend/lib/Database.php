@@ -15,7 +15,9 @@ class Database
         $this->pdo = new PDO($dsn, $config['username'], $config['password'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_AUTOCOMMIT => true,
         ]);
+        error_log('Database: 数据库连接已建立，autocommit=' . ($this->pdo->getAttribute(PDO::ATTR_AUTOCOMMIT) ? 'true' : 'false'));
     }
 
     public function pdo(): PDO

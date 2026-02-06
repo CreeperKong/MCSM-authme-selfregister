@@ -19,7 +19,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [feedback, setFeedback] = useState(null)
 
-  const provider = config?.captcha?.provider || 'simple_math'
+  const provider = config?.captcha?.provider || 'off'
 
   const loadConfig = useCallback(async () => {
     try {
@@ -30,32 +30,13 @@ export default function RegisterPage() {
     }
   }, [])
 
-  const loadChallenge = useCallback(async () => {
-    if (provider !== 'simple_math') return
-    try {
-      const data = await apiClient.fetchCaptchaChallenge()
-      setChallenge(data)
-      setSimpleAnswer('')
-    } catch (error) {
-      setFeedback({ type: 'error', message: '无法获取验证码：' + error.message })
-    }
-  }, [provider])
-
   useEffect(() => {
     loadConfig()
   }, [loadConfig])
 
   useEffect(() => {
-    if (provider === 'simple_math') {
-      loadChallenge()
-    }
-  }, [provider, loadChallenge])
-
-  useEffect(() => {
     setCaptchaToken(null)
-    if (provider !== 'simple_math') {
-      setSimpleAnswer('')
-    }
+    setSimpleAnswer('')
   }, [provider])
 
   const handleChange = (field) => (event) => {
@@ -66,18 +47,12 @@ export default function RegisterPage() {
     setForm(initialForm)
     setSimpleAnswer('')
     setCaptchaToken(null)
-    if (provider === 'simple_math') {
-      loadChallenge()
-    }
   }
 
   const captchaReady = useMemo(() => {
-    if (provider === 'simple_math') {
-      return Boolean(simpleAnswer && challenge?.id)
-    }
-    if (provider === 'none') return true
+    if (provider === 'off' || provider === 'none') return true
     return Boolean(captchaToken)
-  }, [provider, simpleAnswer, challenge, captchaToken])
+  }, [provider, captchaToken])
 
   const handleSubmit = async (event) => {
     event.preventDefault()

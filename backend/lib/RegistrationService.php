@@ -1,17 +1,18 @@
 <?php
 class RegistrationService
 {
-    private PDO $pdo;
+    private mysqli $mysqli;
     private Encryption $encryption;
     private ?MCSMClient $mcsm;
     private string $commandTemplate;
+    private bool $inTransaction = false;
 
-    public function __construct(PDO $pdo, Encryption $encryption, ?MCSMClient $mcsm, array $config)
+    public function __construct(mysqli $mysqli, Encryption $encryption, ?MCSMClient $mcsm, array $config)
     {
-        $this->pdo = $pdo;
+        $this->mysqli = $mysqli;
         $this->encryption = $encryption;
         $this->mcsm = $mcsm;
-        $this->commandTemplate = $config['mcsm']['command_template'] ?? 'authme register {username} {password} {password}';
+        $this->commandTemplate = $config['mcsm']['command_template'] ?? 'authme register {username} {password}';
     }
 
     public function createRequest(array $payload, string $ipAddress = null): array
@@ -38,27 +39,24 @@ class RegistrationService
             throw new HttpException(400, '两次密码输入不一致');
         }
 
-        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM registration_requests WHERE username = :username AND status = "pending"');
-        $stmt->execute([':username' => $username]);
-        if ($stmt->fetchColumn() > 0) {
+        $stmt = $this->mysqli->prepare('SELECT COUNT(*) as cnt FROM registration_requests WHERE username = ? AND status = "pending"');
+        $stmt->bind_param('s', $username);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        if ($row['cnt'] > 0) {
             throw new HttpException(409, '该用户名已提交审核，请等待处理');
         }
 
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
         $encrypted = $this->encryption->encrypt($password);
 
-        $insert = $this->pdo->prepare('INSERT INTO registration_requests (username, email, password_hash, password_payload, note, status, ip_address) VALUES (:username, :email, :password_hash, :payload, :note, "pending", :ip)');
-        $insert->execute([
-            ':username' => $username,
-            ':email' => $email,
-            ':password_hash' => $passwordHash,
-            ':payload' => $encrypted,
-            ':note' => $note,
-            ':ip' => $ipAddress,
-        ]);
+        $insert = $this->mysqli->prepare('INSERT INTO registration_requests (username, email, password_hash, password_payload, note, status, ip_address) VALUES (?, ?, ?, ?, ?, "pending", ?)');
+        $insert->bind_param('ssssss', $username, $email, $passwordHash, $encrypted, $note, $ipAddress);
+        $insert->execute();
 
         return [
-            'id' => (int) $this->pdo->lastInsertId(),
+            'id' => (int) $this->mysqli->insert_id,
             'message' => '提交成功，请等待管理员审核',
         ];
     }
@@ -70,9 +68,15 @@ class RegistrationService
             $status = 'pending';
         }
 
-        $stmt = $this->pdo->prepare('SELECT * FROM registration_requests WHERE status = :status ORDER BY requested_at DESC LIMIT 200');
-        $stmt->execute([':status' => $status]);
-        $rows = $stmt->fetchAll();
+        $stmt = $this->mysqli->prepare('SELECT * FROM registration_requests WHERE status = ? ORDER BY requested_at DESC LIMIT 200');
+        $stmt->bind_param('s', $status);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $rows = [];
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+        }
 
         return array_map([$this, 'transform'], $rows);
     }
@@ -84,10 +88,14 @@ class RegistrationService
         }
 
         try {
-            $this->pdo->beginTransaction();
-            $stmt = $this->pdo->prepare('SELECT * FROM registration_requests WHERE id = :id FOR UPDATE');
-            $stmt->execute([':id' => $id]);
-            $row = $stmt->fetch();
+            $this->mysqli->begin_transaction();
+            $this->inTransaction = true;
+            
+            $stmt = $this->mysqli->prepare('SELECT * FROM registration_requests WHERE id = ? FOR UPDATE');
+            $stmt->bind_param('i', $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
 
             if (!$row) {
                 throw new HttpException(404, '请求不存在');
@@ -102,19 +110,16 @@ class RegistrationService
 
             $this->mcsm->sendCommand($daemonId, $instanceId, $command);
 
-            $update = $this->pdo->prepare('UPDATE registration_requests SET status = "approved", mcsm_daemon_id = :daemon, mcsm_instance_id = :instance, processed_at = NOW(), processed_by = :by, admin_notes = :notes WHERE id = :id');
-            $update->execute([
-                ':daemon' => $daemonId,
-                ':instance' => $instanceId,
-                ':by' => $processedBy,
-                ':notes' => $notes,
-                ':id' => $id,
-            ]);
+            $update = $this->mysqli->prepare('UPDATE registration_requests SET status = "approved", mcsm_daemon_id = ?, mcsm_instance_id = ?, processed_at = NOW(), processed_by = ?, admin_notes = ? WHERE id = ?');
+            $update->bind_param('ssssi', $daemonId, $instanceId, $processedBy, $notes, $id);
+            $update->execute();
 
-            $this->pdo->commit();
+            $this->mysqli->commit();
+            $this->inTransaction = false;
         } catch (Throwable $e) {
-            if ($this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
+            if ($this->inTransaction) {
+                $this->mysqli->rollback();
+                $this->inTransaction = false;
             }
             throw $e;
         }
@@ -129,10 +134,15 @@ class RegistrationService
         }
 
         try {
-            $this->pdo->beginTransaction();
-            $stmt = $this->pdo->prepare('SELECT * FROM registration_requests WHERE id = :id FOR UPDATE');
-            $stmt->execute([':id' => $id]);
-            $row = $stmt->fetch();
+            $this->mysqli->begin_transaction();
+            $this->inTransaction = true;
+            
+            $stmt = $this->mysqli->prepare('SELECT * FROM registration_requests WHERE id = ? FOR UPDATE');
+            $stmt->bind_param('i', $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            
             if (!$row) {
                 throw new HttpException(404, '请求不存在');
             }
@@ -140,17 +150,16 @@ class RegistrationService
                 throw new HttpException(409, '请求已被处理');
             }
 
-            $update = $this->pdo->prepare('UPDATE registration_requests SET status = "rejected", rejection_reason = :reason, processed_at = NOW(), processed_by = :by WHERE id = :id');
-            $update->execute([
-                ':reason' => $reason,
-                ':by' => $processedBy,
-                ':id' => $id,
-            ]);
+            $update = $this->mysqli->prepare('UPDATE registration_requests SET status = "rejected", rejection_reason = ?, processed_at = NOW(), processed_by = ? WHERE id = ?');
+            $update->bind_param('ssi', $reason, $processedBy, $id);
+            $update->execute();
 
-            $this->pdo->commit();
+            $this->mysqli->commit();
+            $this->inTransaction = false;
         } catch (Throwable $e) {
-            if ($this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
+            if ($this->inTransaction) {
+                $this->mysqli->rollback();
+                $this->inTransaction = false;
             }
             throw $e;
         }
@@ -160,9 +169,11 @@ class RegistrationService
 
     private function find(int $id): array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM registration_requests WHERE id = :id');
-        $stmt->execute([':id' => $id]);
-        $row = $stmt->fetch();
+        $stmt = $this->mysqli->prepare('SELECT * FROM registration_requests WHERE id = ?');
+        $stmt->bind_param('i', $id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
         if (!$row) {
             throw new HttpException(404, '请求不存在');
         }

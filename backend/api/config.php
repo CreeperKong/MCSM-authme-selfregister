@@ -25,11 +25,28 @@ try {
         'mcsm' => [
             'defaultDaemonId' => $config['mcsm']['default_daemon_id'] ?? '',
             'defaultInstanceId' => $config['mcsm']['default_instance_id'] ?? '',
-            'commandTemplate' => $config['mcsm']['command_template'] ?? 'authme register {username} {password} {password}',
+            'commandTemplate' => getCommandTemplate() ?? 'authme register {username} {password}',
         ],
     ]);
 } catch (HttpException $e) {
     Response::error($e->getMessage(), $e->getStatusCode(), $e->getDetails());
 } catch (Throwable $e) {
     Response::error('配置读取失败：' . $e->getMessage(), 500);
+}
+
+function getCommandTemplate() {
+    $localEnvPath = dirname(__DIR__, 2) . '/.env.local';
+    if (file_exists($localEnvPath)) {
+        $lines = file($localEnvPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (str_starts_with($line, 'AUTHME_COMMAND_TEMPLATE=')) {
+                $parts = explode('=', $line, 2);
+                if (count($parts) === 2) {
+                    return trim($parts[1], '"\'');
+                }
+            }
+        }
+    }
+    return null;
 }

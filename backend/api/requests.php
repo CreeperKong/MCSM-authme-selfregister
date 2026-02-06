@@ -8,7 +8,7 @@ try {
     Http::ensureMethod(['GET', 'POST']);
     Http::requireAdminToken($config);
 
-    $service = new RegistrationService($database->pdo(), $encryption, null, $config);
+    $service = new RegistrationService($database->mysqli(), $encryption, null, $config);
 
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $status = Http::query('status', 'pending');
@@ -27,7 +27,7 @@ try {
         if (!$requestId) {
             throw new HttpException(400, '缺少请求 ID');
         }
-        $mcsmService = new RegistrationService($database->pdo(), $encryption, new MCSMClient($config['mcsm']), $config);
+        $mcsmService = new RegistrationService($database->mysqli(), $encryption, new MCSMClient($config['mcsm']), $config);
         $result = $mcsmService->approve($requestId, $daemonId, $instanceId, $notes);
         Response::success(['item' => $result]);
     }
